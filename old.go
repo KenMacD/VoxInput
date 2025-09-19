@@ -52,10 +52,20 @@ func listenOld(pidPath, apiKey, httpApiBase, lang, model string, replay bool, ti
 	signal.Notify(sigChan, syscall.SIGTERM)
 
 	err = pid.Write(pidPath)
+	if err != nil {
+		log.Fatalln("main: failed to write PID file: ", err)
+	}
+
+	recordingPath, err := pid.RecordingPath()
+	if err != nil {
+		log.Fatalln("main: failed to get recording status file path: ", err)
+	}
+
 	defer func() {
 		if err := os.Remove(pidPath); err != nil {
 			log.Println("main: failed to remove PID file: ", err)
 		}
+		_ = pid.RemoveRecordingStatus(recordingPath)
 	}()
 
 Listen:
@@ -74,6 +84,11 @@ Listen:
 		}
 
 		log.Println("main: Recording...")
+
+		// Create the recording status file when recording starts
+		if err := pid.WriteRecordingStatus(recordingPath); err != nil {
+			log.Println("main: failed to create recording status file: ", err)
+		}
 
 		var buf bytes.Buffer
 		ctx, cancel := context.WithCancel(context.Background())
@@ -98,6 +113,11 @@ Listen:
 			break
 		}
 		cancel()
+
+		// Remove the recording status file when recording stops
+		if err := pid.RemoveRecordingStatus(recordingPath); err != nil {
+			log.Println("main: failed to remove recording status file: ", err)
+		}
 
 		err = <-errCh
 		if err != nil && !errors.Is(err, context.Canceled) {

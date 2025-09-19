@@ -143,10 +143,20 @@ func listen(pidPath, apiKey, httpApiBase, wsApiBase, lang, model string, timeout
 	signal.Notify(sigChan, syscall.SIGTERM)
 
 	err = pid.Write(pidPath)
+	if err != nil {
+		log.Fatalln("main: failed to write PID file: ", err)
+	}
+
+	recordingPath, err := pid.RecordingPath()
+	if err != nil {
+		log.Fatalln("main: failed to get recording status file path: ", err)
+	}
+
 	defer func() {
 		if err := os.Remove(pidPath); err != nil {
 			log.Println("main: failed to remove PID file: ", err)
 		}
+		_ = pid.RemoveRecordingStatus(recordingPath)
 	}()
 
 Listen:
@@ -205,6 +215,11 @@ Listen:
 
 		finishInit()
 		log.Println("main: Record/Transcribe...")
+
+		// Create the recording status file when recording starts
+		if err := pid.WriteRecordingStatus(recordingPath); err != nil {
+			log.Println("main: failed to create recording status file: ", err)
+		}
 
 		ui.Chan <- &gui.ShowListeningMsg{}
 
@@ -366,6 +381,12 @@ Listen:
 
 		ui.Chan <- &gui.ShowStoppingMsg{}
 		log.Println("main: finished transcribing")
+
+		// Remove the recording status file when recording stops
+		if err := pid.RemoveRecordingStatus(recordingPath); err != nil {
+			log.Println("main: failed to remove recording status file: ", err)
+		}
+
 		conn.Close()
 		cancel()
 

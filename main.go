@@ -27,7 +27,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		fmt.Println("Expected 'listen', 'record', 'write', or 'help' subcommands")
+		fmt.Println("Expected 'listen', 'record', 'write', 'status', or 'help' subcommands")
 		os.Exit(1)
 	}
 
@@ -43,6 +43,7 @@ func main() {
 		fmt.Println("  record - Tell existing listener to start recording audio. In realtime mode it also begins transcription")
 		fmt.Println("  write  - Tell existing listener to stop recording audio and begin transcription if not in realtime mode")
 		fmt.Println("  stop   - Alias for write; makes more sense in realtime mode")
+		fmt.Println("  status - Check if the listener is currently recording")
 		fmt.Println("  help   - Show this help message")
 		fmt.Println("  ver    - Print version")
 		return
@@ -127,6 +128,33 @@ func main() {
 	case "write":
 		log.Println("main: Sending stop/write signal")
 		err = proc.Signal(syscall.SIGUSR2)
+	case "status":
+		// Check if the process is running by sending signal 0
+		err = proc.Signal(syscall.Signal(0))
+		if err != nil {
+			fmt.Println("not running")
+			os.Exit(1)
+		}
+
+		// Check if the service is currently recording
+		recordingPath, err := pid.RecordingPath()
+		if err != nil {
+			log.Println("main: failed to get recording status file path: ", err)
+			fmt.Println("running")
+			return
+		}
+
+		// Try to read the recording status file
+		if _, err := os.Stat(recordingPath); err == nil {
+			fmt.Println("recording")
+		} else if os.IsNotExist(err) {
+			fmt.Println("running")
+		} else {
+			// Some other error occurred
+			log.Println("main: error checking recording status file: ", err)
+			fmt.Println("running")
+		}
+		return
 	default:
 		log.Fatalln("main: Unknown command: ", os.Args[1])
 	}
