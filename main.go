@@ -43,6 +43,7 @@ func main() {
 		fmt.Println("  record - Tell existing listener to start recording audio. In realtime mode it also begins transcription")
 		fmt.Println("  write  - Tell existing listener to stop recording audio and begin transcription if not in realtime mode")
 		fmt.Println("  stop   - Alias for write; makes more sense in realtime mode")
+		fmt.Println("  toggle - Toggle recording state (start or stop based on current state)")
 		fmt.Println("  status - Check if the listener is currently recording")
 		fmt.Println("  help   - Show this help message")
 		fmt.Println("  ver    - Print version")
@@ -128,6 +129,26 @@ func main() {
 	case "write":
 		log.Println("main: Sending stop/write signal")
 		err = proc.Signal(syscall.SIGUSR2)
+	case "toggle":
+		// Check if the service is currently recording
+		recordingPath, err := pid.RecordingPath()
+		if err != nil {
+			log.Fatalln("main: failed to get recording status file path: ", err)
+		}
+
+		// Check if the recording status file exists
+		if _, err := os.Stat(recordingPath); err == nil {
+			// Currently recording, so send stop signal
+			log.Println("main: Sending stop/write signal (toggle from recording to stopped)")
+			err = proc.Signal(syscall.SIGUSR2)
+		} else if os.IsNotExist(err) {
+			// Not currently recording, so send record signal
+			log.Println("main: Sending record signal (toggle from stopped to recording)")
+			err = proc.Signal(syscall.SIGUSR1)
+		} else {
+			// Some other error occurred
+			log.Fatalln("main: error checking recording status file: ", err)
+		}
 	case "status":
 		// Check if the process is running by sending signal 0
 		err = proc.Signal(syscall.Signal(0))
